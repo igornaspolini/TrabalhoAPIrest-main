@@ -1,7 +1,28 @@
 const express = require('express');
 const router = express.Router();
-const appointmentsDB = require('../db/appointments.json');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+
+var appointmentsDB = loadAppointments();
+
+// Função carrega appointments a partir do arquivo JSON
+function loadAppointments() {
+    try {
+      return JSON.parse(fs.readFileSync('./src/db/appointments.json', 'utf8'));
+    } catch (err) {
+      return [];
+    }
+}
+
+// Função para salvar os appointments no arquivo JSON
+function saveAppointments() {
+    try {
+      fs.writeFileSync('./src/db/appointments.json', JSON.stringify(appointmentsDB, null, 2));
+      return "Sucesso"
+    } catch (err) {
+      return "Erro ao salvar";
+    }
+}
 
 /**
  * @swagger
@@ -106,10 +127,10 @@ router.get('/', (req, res) => {
 
 // Retornar agendamentos pelo nome do profissional
 // GET /data/appointments/professional/Winton%20Blake
-router.get('/professional/:professional', (req, res) => {
-    const professional = req.params.professional;
-    console.log("Nome recebido na requisição:", professional);
-    const appointments = appointmentsDB.filter(app => app.professional.toLowerCase() === professional.toLowerCase()); //para achar tudo, filter ao invés de find
+router.get('/appointment/:appointment', (req, res) => {
+    const appointment = req.params.appointment;
+    console.log("Nome recebido na requisição:", appointment);
+    const appointments = appointmentsDB.filter(app => app.appointment.toLowerCase() === appointment.toLowerCase()); //para achar tudo, filter ao invés de find
     if (!appointments) return res.status(404).json({
         "erro": "Nenhum agendamento encontrado para o profissional"
     });
@@ -213,40 +234,16 @@ router.get('/date/:date', (req, res) => {
 // Inserir um novo agendamento
 // POST "/data/appointments" BODY {"specialty": "Fisioterapeuta", "comments": "Realizar sessão", "date": "2023-08-15 16:00:00", "student": "Bingo Heeler", "professional": "Winton Blake"}
 router.post('/', (req, res) => {
-    const appointment = req.body;
-
-    // Gerar um novo ID
-    appointment.id = uuidv4();
-
-    if (!appointment.specialty) return res.status(400).json({
-        "erro": "Agendamento precisa ter uma 'especialidade'"
-    });
-
-    if (!appointment.comments) return res.status(400).json({
-        "erro": "Agendamento precisa ter 'comentários'"
-    });
-
-    if (!appointment.date) return res.status(400).json({
-        "erro": "Agendamento precisa ter uma 'data'"
-    });
-
-    if (!appointment.student) return res.status(400).json({
-        "erro": "Agendamento precisa ter um 'aluno'"
-    });
-
-    if (!appointment.professional) return res.status(400).json({
-        "erro": "Agendamento precisa ter um 'profissional'"
-    });
-
-    const camposValidos = ['id', 'specialty', 'comments', 'date', 'student', 'professional'];
-    for (const campo in appointment) {
-        if (!camposValidos.includes(campo)) {
-            return res.status(400).json({ "erro": `Campo '${campo}' não é válido` });
-        }
+    const newAppointment = {
+        id: uuidv4(),
+        ...req.body
     }
-
-    appointmentsDB.push(appointment);
-    return res.json(appointment);
+    console.log(newAppointment);
+    appointmentsDB = loadAppointments();
+    appointmentsDB.push(newAppointment);
+    let result = saveAppointments();
+    console.log(result);
+    return res.json(newAppointment);
 });
 
 /**
@@ -282,47 +279,19 @@ router.post('/', (req, res) => {
 // Substituir um agendamento
 // PUT "/data/appointments/id/7a6cc1282c5f6ec0235acd2bfa780145aa2a67fd" BODY {"specialty": "Fisioterapeuta", "comments": "Realizar sessão", "date": "2023-08-15 16:00:00", "student": "Bingo Heeler", "professional": "Winton Blake"}
 router.put('/id/:id', (req, res) => {
-    const id = req.params.id;
-    const indexAppointment = appointmentsDB.findIndex(app => app.id === id);
-    const updatedAppointment = req.body;
-
-    if (indexAppointment === -1) return res.status(404).json({
-        "erro": "Agendamento não encontrado"
-    });
-
-    updatedAppointment.id = appointmentsDB[indexAppointment].id; // Manter o ID existente
-
-    if (!updatedAppointment.specialty) return res.status(400).json({
-        "erro": "Agendamento precisa ter uma 'especialidade'"
-    });
-
-    if (!updatedAppointment.comments) return res.status(400).json({
-        "erro": "Agendamento precisa ter 'comentários'"
-    });
-
-    if (!updatedAppointment.date) return res.status(400).json({
-        "erro": "Agendamento precisa ter uma 'data'"
-    });
-
-    if (!updatedAppointment.student) return res.status(400).json({
-        "erro": "Agendamento precisa ter um 'aluno'"
-    });
-
-    if (!updatedAppointment.professional) return res.status(400).json({
-        "erro": "Agendamento precisa ter um 'profissional'"
-    });
-
-    const camposValidos = ['id', 'specialty', 'comments', 'date', 'student', 'professional'];
-    for (const campo in updatedAppointment) {
-        if (!camposValidos.includes(campo)) {
-            return res.status(400).json({ "erro": `Campo '${campo}' não é válido` });
-        }
-    }
-
-    // Atualiza o agendamento
-    appointmentsDB[indexAppointment] = updatedAppointment;
-
-    return res.json(updatedAppointment);
+    const id = req.params.id
+    const newAppointment = req.body
+    appointmentsDB = loadAppointments();
+    const currentAppointment = appointmentsDB.find((appointment) => appointment.id === id)
+    const currentIndex = appointmentsDB.findIndex((appointment) => appointment.id === id)
+    if (!currentAppointment)
+        return res.status(404).json({
+            "Erro": "Agendamento não encontrado!"
+        })
+    appointmentsDB[currentIndex] = newAppointment
+    let result = saveAppointments();
+    console.log(result);
+    return res.json(newAppointment);
 });
 
 /**
@@ -348,14 +317,17 @@ router.put('/id/:id', (req, res) => {
 // Deletar um agendamento pelo ID
 // DELETE "/data/appointments/id/7a6cc1282c5f6ec0235acd2bfa780145aa2a67fd"
 router.delete('/id/:id', (req, res) => {
-    const id = req.params.id;
-    const indexAppointment = appointmentsDB.findIndex(app => app.id === id);
-    if (indexAppointment === -1) return res.status(404).json({
-        "erro": "Agendamento não encontrado"
-    });
-    // Remove o agendamento da lista
-    const deletado = appointmentsDB.splice(indexAppointment, 1);
+    const id = req.params.id
+    appointmentsDB = loadAppointments();
+    const currentAppointment = appointmentsDB.find((appointment) => appointment.id === id)
+    const currentIndex = appointmentsDB.findIndex((appointment) => appointment.id === id)
+    if (!currentAppointment) return res.status(404).json({
+        "Erro": "Apointment não encontrado!"
+    })
+    var deletado = appointmentsDB.splice(currentIndex, 1)
+    let result = saveAppointments();
+    console.log(result);
     res.json(deletado);
-});
+})
 
 module.exports = router;

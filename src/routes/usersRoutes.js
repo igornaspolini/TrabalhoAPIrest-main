@@ -1,9 +1,31 @@
 const express = require('express');
 const router = express.Router();
-const usersDB = require('../db/users.json');
 const { v4: uuidv4 } = require('uuid');
 const bcrypt = require('bcrypt');
 const saltRounds = 10;
+
+const fs = require('fs');
+
+var usersDB = loadUsers();
+
+// Função carrega usuários a partir do arquivo JSON
+function loadUsers() {
+    try {
+      return JSON.parse(fs.readFileSync('./src/db/users.json', 'utf8'));
+    } catch (err) {
+      return [];
+    }
+}
+
+// Função para salvar os usuários no arquivo JSON
+function saveUsers() {
+    try {
+      fs.writeFileSync('./src/db/users.json', JSON.stringify(usersDB, null, 2));
+      return "Sucesso"
+    } catch (err) {
+      return "Erro ao salvar";
+    }
+}
 
 /**
  * @swagger
@@ -124,7 +146,7 @@ router.get('/nome/:name', (req, res) => {
  * @swagger
  * /data/users/id/{id}:
  *   get:
- *     summary: Retorna um estudante pelo ID
+ *     summary: Retorna um usuario pelo ID
  *     tags: [Users]
  *     parameters:
  *       - in: path
@@ -179,53 +201,18 @@ router.get('/id/:id', (req, res) => {
 
 // Inserir um novo usuario
 // POST "/data/users" BODY {"id": "7a6cc1282c5f6ec0235acd2bfa780145aa2a67fd", "name": "Andre Faria Ruaro", "email": "andre.ruaro@unesc.net", "user": "andre.ruaro", "pwd": "7a6cc1282c5f6ec0235acd2bfa780145aaskem5n", "level": "admin", "status": "on"},
-router.post('/', async (req, res) => {
-    const usuario = req.body
-    console.log(usuario);
-
-    // Gerar um novo ID
-    usuario.id = uuidv4();
-    
-    if(!usuario.name) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'nome'"
-    })
-    
-    if(!usuario.email) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'email'"
-    })
-    
-    if(!usuario.user) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'username'"
-    })
-    
-    if(!usuario.pwd) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'password'"
-    })
-    
-    if(!usuario.level) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'nivel'"
-    })
-    
-    if(!usuario.status) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'status'"
-    })
-
-    // Criptografar a senha
-    const hashedPassword = await bcrypt.hash(usuario.pwd, saltRounds);
-    usuario.pwd = hashedPassword;
-
-    const camposValidos = ['id', 'name', 'email', 'user', 'pwd', 'level', 'status'];
-    for (const campo in usuario) {
-        if (!camposValidos.includes(campo)) {
-            return res.status(400).json({ "erro": `Campo '${campo}' não é válido` });
-        }
+router.post('/', (req, res) => {
+    const newUser = {
+        id: uuidv4(),
+        ...req.body
     }
-
-    usersDB.push(usuario);
-    return res.json(usuario);
-
-})
-
+    console.log(newUser);
+    usersDB = loadUsers();
+    usersDB.push(newUser);
+    let result = saveUsers();
+    console.log(result);
+    return res.json(newUser);
+});
 /**
  * @swagger
  * /data/users/id/{id}:
@@ -258,56 +245,21 @@ router.post('/', async (req, res) => {
 
 // Substituir um usuario
 // PUT "/data/users/id/7a6cc1282c5f6ec0235acd2bfa780145aa2a67fd" BODY {"id": "7a6cc1282jhndrfnjdfd", "name": "Nicolas De Villa Cardoso", "email": "Nicolas.Cardoso@unesc.net", "user": "Nicolas.Cardoso", "pwd": "7a6cc1282c5fhdfshifdjihn", "level": "admin", "status": "off"},
-router.put('/id/:id', async (req, res) => {
+router.put('/:id', (req, res) => {
     const id = req.params.id
-    console.log("Id recebido na requisição:", id);
-    const indiceUsuario = usersDB.findIndex(user => user.id === id);
-    const novoUsuario = req.body
-
-    if(indiceUsuario <= -1) return res.status(404).json({
-        "erro": "Usuario não encontrado"
-    })
-    
-    novoUsuario.id = usersDB[indiceUsuario].id
-    
-    if(!novoUsuario.name) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'nome'"
-    })
-    
-    if(!novoUsuario.email) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'email'"
-    })
-    
-    if(!novoUsuario.user) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'username'"
-    })
-    
-    if(!novoUsuario.pwd) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'password'"
-    })
-    
-    if(!novoUsuario.level) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'nivel'"
-    })
-    
-    if(!novoUsuario.status) return res.status(400).json({
-        "erro": "Usuario precisa ter um 'status'"
-    })
-
-    // Criptografar a senha
-    const hashedPassword = await bcrypt.hash(novoUsuario.pwd, saltRounds);
-    novoUsuario.pwd = hashedPassword;
-
-    const camposValidos = ['id','name', 'email', 'user', 'pwd', 'level', 'status'];
-    for (const campo in novoUsuario) {
-        if (!camposValidos.includes(campo)) {
-            return res.status(400).json({ "erro": `Campo '${campo}' não é válido` });
-        }
-    }
-
-    usersDB[indiceUsuario] = novoUsuario
-    return res.json(novoUsuario)
-})
+    const newUser = req.body
+    usersDB = loadUsers();
+    const currentUser = usersDB.find((user) => user.id === id)
+    const currentIndex = usersDB.findIndex((user) => user.id === id)
+    if (!currentUser)
+        return res.status(404).json({
+            "Erro": "Usuário não encontrado!"
+        })
+    usersDB[currentIndex] = newUser
+    let result = saveUsers();
+    console.log(result);
+    return res.json(newUser);
+});
 
 /**
  * @swagger
@@ -337,13 +289,18 @@ router.put('/id/:id', async (req, res) => {
 // DELETE "/data/users/id/7a6cc1282c5f6ec0235acd2bfa780145aa2a67fd"
 router.delete('/id/:id', (req, res) => {
     const id = req.params.id
-    console.log("Id recebido na requisição:", id);
-    const indiceUsuario = usersDB.findIndex(user => user.id === id);
-    if(indiceUsuario <= -1) return res.status(404).json({
-        "erro": "Usuario não encontrado"
+    usersDB = loadUsers();
+    const currentUser = usersDB.find((user) => user.id === id)
+    const currentIndex = usersDB.findIndex((user) => user.id === id)
+    if (!currentUser) return res.status(404).json({
+        "Erro": "Usuario não encontrado!"
     })
-    var deletado = usersDB.splice(indiceUsuario, 1)
-    res.json(deletado)
+    var deletado = usersDB.splice(currentIndex, 1)
+    let result = saveUsers();
+    console.log(result);
+    res.json(deletado);
 })
+
+//deu certo
 
 module.exports = router
